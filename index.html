@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Café con Leche - POS con Control de Acceso, Reportes Administrativos, Procesos Hijos y Devoluciones">
+  <title>Café con Leche | Cafetería & POS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ========================================================
+       MODAL DE ENTRADA OBLIGATORIA (WELCOME & AUTH GATE)
+       Aparece al abrir el sistema para elegir modo de ingreso
+       ======================================================== -->
+  <div class="auth-gate-overlay" id="authGateOverlay">
+    <div class="auth-gate-card">
+      <div class="auth-gate-logo">☕</div>
+      <h2>Café con Leche</h2>
+      <p>Bienvenido/a a nuestro sistema. Por favor selecciona cómo deseas ingresar hoy:</p>
+
+      <!-- Selector de pestañas: Login | Registro | Invitado -->
+      <div class="auth-switch-tabs">
+        <button class="auth-switch-btn active" data-pane="pane-login" onclick="cambiarAuthTab('pane-login')">🔐 Iniciar Sesión</button>
+        <button class="auth-switch-btn" data-pane="pane-registro" onclick="cambiarAuthTab('pane-registro')">📝 Registrarse</button>
+        <button class="auth-switch-btn" data-pane="pane-invitado" onclick="cambiarAuthTab('pane-invitado')">🚶 Invitado</button>
+      </div>
+
+      <!-- PANE 1: INICIAR SESIÓN (ADMIN O CLIENTE) -->
+      <div class="auth-pane active" id="pane-login">
+        <form onsubmit="ejecutarLoginGate(event)">
+          <div class="form-group">
+            <label for="gateLoginEmail">Correo Electrónico *</label>
+            <input type="email" id="gateLoginEmail" class="input-style" placeholder="ej: admin@cafeconleche.com" required>
+          </div>
+          <div class="form-group">
+            <label for="gateLoginPassword">Contraseña *</label>
+            <input type="password" id="gateLoginPassword" class="input-style" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn primary full" style="margin-top: 6px;">Entrar a mi Cuenta</button>
+        </form>
+      </div>
+
+      <!-- PANE 2: REGISTRARSE COMO CLIENTE -->
+      <div class="auth-pane" id="pane-registro">
+        <form onsubmit="ejecutarRegistroGate(event)">
+          <div class="form-group">
+            <label for="gateRegNombre">Nombre Completo *</label>
+            <input type="text" id="gateRegNombre" class="input-style" placeholder="Ej: Sofía Ramírez" required>
+          </div>
+          <div class="form-group">
+            <label for="gateRegEmail">Correo Electrónico *</label>
+            <input type="email" id="gateRegEmail" class="input-style" placeholder="sofia@ejemplo.com" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="gateRegTel">Teléfono</label>
+              <input type="text" id="gateRegTel" class="input-style" placeholder="2221234567">
+            </div>
+            <div class="form-group">
+              <label for="gateRegPass">Contraseña *</label>
+              <input type="password" id="gateRegPass" class="input-style" placeholder="Crea tu clave" required>
+            </div>
+          </div>
+          <button type="submit" class="btn primary full" style="margin-top: 6px;">Crear Cuenta de Cliente</button>
+        </form>
+      </div>
+
+      <!-- PANE 3: ENTRAR COMO INVITADO -->
+      <div class="auth-pane" id="pane-invitado" style="text-align: center;">
+        <div style="padding: 15px; background: #faf3e8; border-radius: 12px; margin-bottom: 16px; font-size: 0.9rem; color: var(--brown-light);">
+          <span style="font-size: 1.8rem; display: block; margin-bottom: 6px;">☕🥐</span>
+          ¿Solo vienes por un café rápido? Ingresa como invitado para explorar nuestro menú completo y realizar tus órdenes sin necesidad de crear una contraseña.
+        </div>
+        <button type="button" class="btn primary full" onclick="ejecutarInvitadoGate()">Continuar como Invitado</button>
+      </div>
+
+      <!-- BOTONES DE ACCESO RÁPIDO PARA DEMOSTRACIÓN / EVALUACIÓN -->
+      <div class="quick-demo-access">
+        <span>⚡ Accesos Rápidos de Prueba (1 clic):</span>
+        <div class="quick-demo-buttons">
+          <button type="button" class="btn-demo" onclick="demoLoginAdmin()" title="Accede con rol Administrador para ver Reportes, Procesos y Devoluciones">
+            👑 Admin
+          </button>
+          <button type="button" class="btn-demo" onclick="demoLoginCliente()" title="Accede con rol Cliente">
+            ☕ Cliente
+          </button>
+          <button type="button" class="btn-demo" onclick="ejecutarInvitadoGate()" title="Entra como Invitado">
+            🚶 Invitado
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- BANNER INFORMATIVO PARA CLIENTES / INVITADOS -->
+  <div id="roleBanner" class="client-mode-banner" style="display: none;"></div>
+
+  <!-- ========================================================
+       HEADER & NAVBAR CON CONTROL DINÁMICO DE ROLES
+       ======================================================== -->
+  <header class="header">
+    <nav class="nav container">
+      <a href="#inicio" class="logo">☕ Café con Leche</a>
+      
+      <button class="menu-toggle" id="menuToggle" aria-label="Abrir menú">☰</button>
+      
+      <div class="nav-links" id="navLinks">
+        <!-- Enlaces públicos (Todos los usuarios) -->
+        <a href="#inicio">Inicio</a>
+        <a href="#menu">Menú</a>
+        <a href="#pedido">Punto de Venta</a>
+
+        <!-- Enlaces PRIVADOS EXCLUSIVOS para Administradores -->
+        <a href="#reportes" class="admin-only">📊 Reportes <span class="nav-badge">Admin</span></a>
+        <a href="#procesos" class="admin-only">⚙️ Procesos Hijos</a>
+        <a href="#gestion" class="admin-only">🔄 Devoluciones & BD</a>
+      </div>
+
+      <!-- Zona de perfil y switch de usuario -->
+      <div class="header-auth-zone" id="headerAuthZone">
+        <!-- Renderizado dinámico desde app.js -->
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- HERO SECTION (TODOS) -->
+    <section id="inicio" class="hero">
+      <div class="hero-content container">
+        <span class="eyebrow" id="heroWelcomeTag">CAFETERÍA DE ESPECIALIDAD & POS</span>
+        <h1 id="heroTitle">Un buen café<br><span>empieza aquí.</span></h1>
+        <p id="heroDesc">Disfruta de café de especialidad recién tostado, bebidas artesanales, repostería y desayunos preparados al momento con ingredientes seleccionados.</p>
+        
+        <div class="hero-buttons">
+          <a href="#menu" class="btn primary">Explorar Menú</a>
+          <a href="#pedido" class="btn secondary">Hacer Pedido</a>
+          <!-- Accesos directos solo para Administradores -->
+          <a href="#reportes" class="btn btn-info admin-only">📊 Panel de Reportes</a>
+          <a href="#procesos" class="btn btn-special admin-only">⚙️ Monitoreo de Procesos</a>
+        </div>
+      </div>
+      <div class="coffee-decoration">☕</div>
+    </section>
+
+    <!-- MENU SECTION (TODOS) -->
+    <section id="menu" class="section">
+      <div class="container">
+        <div class="section-heading">
+          <span class="eyebrow">NUESTRAS ESPECIALIDADES</span>
+          <h2>Elige tu favorito</h2>
+          <p>Consulta nuestras bebidas y alimentos con disponibilidad en tiempo real.</p>
+        </div>
+
+        <div class="filters">
+          <button class="filter active" data-category="todos">Todos</button>
+          <button class="filter" data-category="cafe">Café</button>
+          <button class="filter" data-category="fria">Bebidas frías</button>
+          <button class="filter" data-category="comida">Comida</button>
+          <button class="filter" data-category="postre">Postres</button>
+        </div>
+
+        <div class="menu-grid" id="menuGrid">
+          <p style="grid-column: 1/-1; text-align: center; color: var(--muted);">Cargando catálogo...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- PEDIDO / CAJA (TODOS: CLIENTES, INVITADOS Y ADMIN) -->
+    <section id="pedido" class="section order-section">
+      <div class="container order-layout">
+        <div>
+          <span class="eyebrow">TU ORDEN DE COMPRA</span>
+          <h2>Caja & Pedido</h2>
+          <p class="muted">Revisa tu orden, selecciona el tiempo en que recogerás tus productos y confirma tu pedido. Te enviaremos un correo electrónico de confirmación.</p>
+          
+          <div class="client-select-box">
+            <label for="clienteSelect">👤 Cliente Asociado a la Orden:</label>
+            <div class="select-client-row">
+              <select id="clienteSelect" class="input-style">
+                <option value="">Cargando clientes...</option>
+              </select>
+              <button class="btn secondary" id="btnNuevoCliente" title="Registrar nuevo cliente">+ Nuevo</button>
+            </div>
+
+            <div class="time-select-row">
+              <label for="tiempoEstimadoSelect">⏱️ Tiempo Estimado de Recolección:</label>
+              <select id="tiempoEstimadoSelect" class="input-style" style="width: auto; flex: 1;">
+                <option value="10">10 minutos (Bebidas rápidas)</option>
+                <option value="15" selected>15 minutos (Estándar)</option>
+                <option value="20">20 minutos (Con alimentos calientes)</option>
+                <option value="30">30 minutos (Alta demanda)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="order-info">
+            <div><strong>📧</strong><span><strong>Confirmación por Correo:</strong> Recibirás tu tiempo de recolección en tu email.</span></div>
+            <div><strong>🔔</strong><span><strong>Aviso de Entrega:</strong> Te notificaremos en cuanto el barista termine tu orden.</span></div>
+            <div><strong>📦</strong><span><strong>Disponibilidad Garantizada:</strong> Descuento automático de existencias.</span></div>
+          </div>
+        </div>
+
+        <div class="order-card">
+          <div class="order-header">
+            <h3>Ticket Actual</h3>
+            <span id="cartCount">0 productos</span>
+          </div>
+          <div id="cartItems" class="cart-items">
+            <div class="empty-cart">Tu pedido está vacío.<br>Agrega productos del menú.</div>
+          </div>
+          <div class="totals">
+            <div><span>Subtotal</span><strong id="subtotal">$0.00</strong></div>
+            <div class="total"><span>Total a Cobrar</span><strong id="total">$0.00</strong></div>
+          </div>
+          <button class="btn primary full" id="checkoutBtn">💳 Confirmar Pedido & Enviar Correo</button>
+          <button class="btn text-btn full" id="clearBtn">Vaciar carrito</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         SECCIONES PRIVADAS EXCLUSIVAS PARA ADMINISTRADORES
+         (Ocultas automáticamente para Clientes e Invitados)
+         ======================================================== -->
+
+    <!-- 1. SECCIÓN DE REPORTES ANALÍTICOS (SOLO ADMIN) -->
+    <section id="reportes" class="section admin-only">
+      <div class="container">
+        <div class="section-heading">
+          <span class="eyebrow">PANEL ADMINISTRATIVO • INTELIGENCIA DE NEGOCIO</span>
+          <h2>Módulo de Reportes Financieros</h2>
+          <p>Métricas financieras, recaudación diaria, rendimiento por producto y comparativo por periodos.</p>
+        </div>
+
+        <div class="admin-tabs">
+          <button class="tab-btn report-tab active" data-tab="tab-rep-dia">📅 1. Venta del Día</button>
+          <button class="tab-btn report-tab" data-tab="tab-rep-prod">☕ 2. Venta del Producto en el Día</button>
+          <button class="tab-btn report-tab" data-tab="tab-rep-periodo">📈 3. Venta por Periodos</button>
+        </div>
+
+        <!-- REPORTE 1: VENTA DEL DÍA -->
+        <div id="tab-rep-dia" class="tab-content active">
+          <div class="report-filter-bar">
+            <label for="fechaReporteDia"><strong>Seleccionar Fecha:</strong></label>
+            <input type="date" id="fechaReporteDia" class="input-style" style="width: auto;">
+            <button class="btn primary" onclick="cargarReporteVentaDia()">🔍 Consultar Día</button>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <span>Monto Total del Día</span>
+              <strong id="kpiDiaTotal">$0.00</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Total de Tickets</span>
+              <strong id="kpiDiaPedidos">0</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Ticket Promedio</span>
+              <strong id="kpiDiaPromedio">$0.00</strong>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Ticket</th>
+                  <th>Hora</th>
+                  <th>Cliente</th>
+                  <th>Ítems</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tablaReporteDiaBody">
+                <tr><td colspan="6" style="text-align: center;">Cargando reporte...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- REPORTE 2: VENTA DEL PRODUCTO EN EL DÍA -->
+        <div id="tab-rep-prod" class="tab-content">
+          <div class="report-filter-bar">
+            <label for="fechaReporteProd"><strong>Fecha de Análisis:</strong></label>
+            <input type="date" id="fechaReporteProd" class="input-style" style="width: auto;">
+            <button class="btn primary" onclick="cargarReporteProductosDia()">🔍 Analizar Productos</button>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th>Precio Unitario</th>
+                  <th>Unidades Vendidas</th>
+                  <th>Total Recaudado</th>
+                </tr>
+              </thead>
+              <tbody id="tablaReporteProdBody">
+                <tr><td colspan="5" style="text-align: center;">Cargando ventas de productos...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- REPORTE 3: VENTA POR PERIODOS -->
+        <div id="tab-rep-periodo" class="tab-content">
+          <div class="report-filter-bar">
+            <label for="fechaPeriodoInicio"><strong>Desde:</strong></label>
+            <input type="date" id="fechaPeriodoInicio" class="input-style" style="width: auto;">
+            <label for="fechaPeriodoFin"><strong>Hasta:</strong></label>
+            <input type="date" id="fechaPeriodoFin" class="input-style" style="width: auto;">
+            <button class="btn primary" onclick="cargarReportePeriodo()">📊 Generar Reporte</button>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <span>Gran Total Recaudado</span>
+              <strong id="kpiPeriodoTotal">$0.00</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Volumen de Ventas</span>
+              <strong id="kpiPeriodoPedidos">0 órdenes</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Promedio por Venta</span>
+              <strong id="kpiPeriodoPromedio">$0.00</strong>
+            </div>
+          </div>
+
+          <h4 style="margin: 20px 0 10px; color: var(--brown);">Desglose Diario en el Periodo</h4>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Número de Ventas</th>
+                  <th>Total Generado</th>
+                </tr>
+              </thead>
+              <tbody id="tablaPeriodoDiasBody">
+                <tr><td colspan="3" style="text-align: center;">Selecciona un rango de fechas.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4 style="margin: 25px 0 10px; color: var(--brown);">Top 10 Productos Más Vendidos en el Periodo</h4>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Cantidad Vendida</th>
+                  <th>Ingreso Total</th>
+                </tr>
+              </thead>
+              <tbody id="tablaPeriodoTopBody">
+                <tr><td colspan="3" style="text-align: center;">-</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 2. SECCIÓN PROCESOS HIJOS & SEGUIMIENTO (SOLO ADMIN) -->
+    <section id="procesos" class="section admin-only" style="background: #faf3e8;">
+      <div class="container">
+        <div class="section-heading">
+          <span class="eyebrow">PANEL ADMINISTRATIVO • OPERACIÓN CONCURRENTE</span>
+          <h2>Procesos Hijos de Pedidos & Notificaciones</h2>
+          <p>Monitorea y actualiza en tiempo real las 4 etapas de cada orden: Caja, Barra, Cocina y Entrega.</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <label for="filtroIdVentaProceso"><strong>Filtrar por Ticket:</strong></label>
+            <input type="number" id="filtroIdVentaProceso" class="input-style" placeholder="Todos los tickets" style="width: 140px;">
+            <button class="btn secondary" onclick="cargarProcesosHijos()">Filtrar</button>
+          </div>
+          <button class="btn primary" onclick="cargarProcesosHijos()">↻ Refrescar Etapas</button>
+        </div>
+
+        <div id="contenedorProcesosHijos">
+          <!-- Renderizado dinámico de tarjetas de procesos hijos -->
+        </div>
+
+        <!-- Bitácora de correos y avisos enviados -->
+        <div style="margin-top: 40px;">
+          <h3 style="color: var(--brown); margin-bottom: 12px;">📬 Historial de Notificaciones por Correo Enviadas</h3>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ticket</th>
+                  <th>Destinatario</th>
+                  <th>Tipo</th>
+                  <th>Asunto del Mensaje</th>
+                  <th>Fecha de Envío</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tablaNotificacionesBody">
+                <tr><td colspan="7" style="text-align: center;">Cargando historial de notificaciones...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. SECCIÓN GESTIÓN Y OPERACIÓN ESPECIAL: DEVOLUCIONES (SOLO ADMIN) -->
+    <section id="gestion" class="section admin-section admin-only">
+      <div class="container">
+        <div class="section-heading">
+          <span class="eyebrow">PANEL ADMINISTRATIVO • BASE DE DATOS Y AUDITORÍA</span>
+          <h2>Gestión de Ventas & Operación Especial de Devoluciones</h2>
+          <p>Supervisa las tablas de ventas, productos y clientes, y procesa devoluciones con reintegración de inventario.</p>
+        </div>
+
+        <div class="admin-tabs">
+          <button class="tab-btn active" data-tab="tab-ventas">🧾 1. Ventas Registradas</button>
+          <button class="tab-btn special-tab" data-tab="tab-devoluciones">🔄 2. Operación Especial: Devoluciones</button>
+          <button class="tab-btn" data-tab="tab-productos">📦 3. Tabla: Productos e Inventario</button>
+          <button class="tab-btn" data-tab="tab-clientes">👥 4. Tabla: Clientes Registrados</button>
+        </div>
+
+        <!-- TAB: VENTAS -->
+        <div id="tab-ventas" class="tab-content active">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <p class="muted">Lista de órdenes activas. Puedes avisar que el pedido está listo o iniciar una devolución.</p>
+            <button class="btn secondary" onclick="loadVentas()">↻ Actualizar Ventas</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Ticket</th>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Tiempo Recolección</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tablaVentasBody">
+                <tr><td colspan="7" style="text-align: center;">Cargando ventas...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: OPERACIÓN ESPECIAL DEVOLUCIONES -->
+        <div id="tab-devoluciones" class="tab-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h3 style="color: #b71c1c;">Historial de Operaciones Especiales (Devoluciones)</h3>
+              <p class="muted">El trigger de base de datos reincorpora el stock al inventario automáticamente.</p>
+            </div>
+            <button class="btn btn-special" onclick="abrirModalDevolucionManual()">+ Nueva Devolución</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID Dev.</th>
+                  <th>Ticket Venta</th>
+                  <th>Fecha Operación</th>
+                  <th>Cliente</th>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Reembolso</th>
+                  <th>Motivo</th>
+                  <th>Stock Repuesto</th>
+                </tr>
+              </thead>
+              <tbody id="tablaDevolucionesBody">
+                <tr><td colspan="9" style="text-align: center;">Cargando historial de devoluciones...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: PRODUCTOS -->
+        <div id="tab-productos" class="tab-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <p class="muted">Inventario sincronizado con la tabla <code>productos</code>.</p>
+            <button class="btn secondary" onclick="loadProductos()">↻ Actualizar Inventario</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ícono</th>
+                  <th>Nombre</th>
+                  <th>Categoría</th>
+                  <th>Precio</th>
+                  <th>Stock Actual</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tablaProductosBody">
+                <tr><td colspan="7" style="text-align: center;">Cargando productos...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: CLIENTES -->
+        <div id="tab-clientes" class="tab-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <p class="muted">Directorio de clientes registrados en la tabla <code>clientes</code>.</p>
+            <button class="btn secondary" onclick="abrirModalCliente()">+ Registrar Cliente</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nombre Completo</th>
+                  <th>Correo Electrónico</th>
+                  <th>Teléfono</th>
+                  <th>Fecha de Registro</th>
+                </tr>
+              </thead>
+              <tbody id="tablaClientesBody">
+                <tr><td colspan="5" style="text-align: center;">Cargando clientes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: REGISTRAR DEVOLUCIÓN (SOLO ADMIN) -->
+  <div class="modal-overlay" id="modalDevolucion">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🔄 Procesar Devolución (Operación Especial)</h3>
+        <button class="close-modal" onclick="cerrarModalDevolucion()">×</button>
+      </div>
+      <form id="formDevolucion" onsubmit="enviarDevolucion(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="devIdVenta">ID de Ticket / Venta *</label>
+            <input type="number" id="devIdVenta" class="input-style" placeholder="Ej: 1" required onchange="cargarDetallesParaDevolucion()">
+          </div>
+          <div class="form-group" style="display: flex; align-items: flex-end;">
+            <button type="button" class="btn secondary full" onclick="cargarDetallesParaDevolucion()">🔍 Buscar Ticket</button>
+          </div>
+        </div>
+
+        <div id="infoVentaContainer" style="display: none; background: #faf3e8; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.88rem;">
+          <div><strong>Cliente:</strong> <span id="devInfoCliente">-</span></div>
+          <div><strong>Fecha Ticket:</strong> <span id="devInfoFecha">-</span></div>
+          <div><strong>Monto Venta:</strong> <span id="devInfoTotal">-</span></div>
+        </div>
+
+        <div class="form-group">
+          <label for="devIdProducto">Producto a Devolver *</label>
+          <select id="devIdProducto" class="input-style" required onchange="actualizarMaxDevolucion()">
+            <option value="">Ingresa primero el ID de venta y busca el ticket</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="devCantidad">Cantidad a Devolver *</label>
+            <input type="number" id="devCantidad" class="input-style" min="1" value="1" required>
+            <small id="devMaxHelp" class="muted" style="font-size: 0.76rem;"></small>
+          </div>
+          <div class="form-group">
+            <label for="devReintegrarStock">Reingresar a Stock</label>
+            <select id="devReintegrarStock" class="input-style">
+              <option value="1">Sí, devolver al inventario</option>
+              <option value="0">No (Merma / Dañado)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devMotivo">Motivo de la Devolución *</label>
+          <input type="text" id="devMotivo" class="input-style" placeholder="Ej: Error en tipo de leche, producto frío..." required>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="submit" class="btn btn-special full">Confirmar Devolución</button>
+          <button type="button" class="btn secondary" onclick="cerrarModalDevolucion()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTRAR CLIENTE RÁPIDO DESDE POS -->
+  <div class="modal-overlay" id="modalCliente">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>👤 Registrar Nuevo Cliente</h3>
+        <button class="close-modal" onclick="cerrarModalCliente()">×</button>
+      </div>
+      <form id="formCliente" onsubmit="guardarCliente(event)">
+        <div class="form-group">
+          <label for="cliNombre">Nombre Completo *</label>
+          <input type="text" id="cliNombre" class="input-style" placeholder="Ej: Andrea Gómez" required>
+        </div>
+        <div class="form-group">
+          <label for="cliEmail">Correo Electrónico (para avisos de recolección) *</label>
+          <input type="email" id="cliEmail" class="input-style" placeholder="andrea@ejemplo.com" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cliTelefono">Teléfono</label>
+            <input type="text" id="cliTelefono" class="input-style" placeholder="2221234567">
+          </div>
+          <div class="form-group">
+            <label for="cliPassword">Contraseña de Acceso</label>
+            <input type="password" id="cliPassword" class="input-style" value="cliente123" required>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="submit" class="btn primary full">Guardar Cliente</button>
+          <button type="button" class="btn secondary" onclick="cerrarModalCliente()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container footer-content" style="display: flex; justify-content: space-between; padding: 25px 0; font-size: 0.9rem; color: var(--muted); border-top: 1px solid #ebd9c5; margin-top: 40px;">
+      <div><strong>☕ Café con Leche POS</strong> — Sistema con Control de Acceso, Reportes y Procesos.</div>
+      <p>© <span id="year"></span> Café con Leche</p>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
