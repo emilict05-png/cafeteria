@@ -1,7 +1,7 @@
 <?php
 // Configuración de base de datos MySQL / MariaDB
 $host = 'cafewithleche.infinityfreeapp.com';
-$db   = 'cafeteria';
+$db   = 'if0_42850024_cafeteria';
 $user = 'if0_42850024';
 $pass = '05OagY05';
 $charset = 'utf8mb4';
